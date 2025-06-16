@@ -42,7 +42,6 @@ current_index = 0
 fig = None
 axes = None
 
-
 def update_plot(index):
     """Update the plot for the given metric index."""
     global axes
@@ -55,6 +54,21 @@ def update_plot(index):
     # Compute data
     data1 = segment1[col].values
     data2 = segment2[col].values
+    
+    # Handle NaN values: create a mask for non-NaN values in both arrays
+    valid_mask = (~np.isnan(data1)) & (~np.isnan(data2))
+    data1 = data1[valid_mask]
+    data2 = data2[valid_mask]
+    
+    # Check if there's any valid data left
+    if len(data1) == 0 or len(data2) == 0:
+        axes[0].set_title(f"{col} Comparison - No valid data after NaN removal")
+        axes[1].set_title(f"{col} Difference - No valid data after NaN removal")
+        fig.suptitle(f"{col} (No valid data)")
+        plt.draw()
+        return
+
+    # Compute difference
     diff = data2 - data1
 
     # Plot comparison
@@ -89,6 +103,43 @@ def update_plot(index):
 
     plt.draw()
 
+def save_comparison(event):
+    """Save the comparison data for the current metric to a CSV file."""
+    col = numerical_columns[current_index]
+    data1 = segment1[col].values
+    data2 = segment2[col].values
+    valid_mask = (~np.isnan(data1)) & (~np.isnan(data2))
+    data1 = data1[valid_mask]
+    data2 = data2[valid_mask]
+    
+    if len(data1) == 0 or len(data2) == 0:
+        print(f"No valid data to save for {col}")
+        return
+
+    diff = data2 - data1
+    # Mark differences (non-zero differences as YES)
+    diff_flag = np.where(np.abs(diff) > 0, "YES", "NO")
+    
+    # Create DataFrame for saving
+    comparison_df = pd.DataFrame({
+        "Index": np.arange(len(data1)),
+        f"{col}_{os.path.splitext(file1)[0]}": data1,
+        f"{col}_{os.path.splitext(file2)[0]}": data2,
+        "Difference": diff,
+        "Has_Difference": diff_flag
+    })
+    
+    # Filter rows where Has_Difference is YES
+    comparison_df = comparison_df[comparison_df["Has_Difference"] == "YES"]
+    
+    if comparison_df.empty:
+        print(f"No differences found for {col}")
+        return
+    
+    # Save to CSV
+    output_filename = f"comparison_{col}.csv"
+    comparison_df.to_csv(output_filename, index=False)
+    print(f"Comparison saved to {output_filename}")
 
 def next_plot(event):
     """Show the next metric's plots."""
@@ -96,39 +147,38 @@ def next_plot(event):
     current_index = (current_index + 1) % len(numerical_columns)
     update_plot(current_index)
 
-
 def prev_plot(event):
     """Show the previous metric's plots."""
     global current_index
     current_index = (current_index - 1) % len(numerical_columns)
     update_plot(current_index)
 
-
 def quit_plot(event):
     """Close the plot window."""
     plt.close()
 
-
 # Create the figure and subplots
 fig, axes = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
-fig.subplots_adjust(bottom=0.2, hspace=0.3)  # Space for buttons and subplot spacing
+fig.subplots_adjust(bottom=0.25, hspace=0.3)  # Increased space for buttons
 axes = axes.flatten()
 
 # Initialize the first plot
 update_plot(current_index)
 
 # Add centered buttons
-ax_prev = plt.axes([0.35, 0.05, 0.1, 0.075])  # Centered at 0.35
-ax_next = plt.axes([0.45, 0.05, 0.1, 0.075])  # Centered at 0.45
-ax_quit = plt.axes([0.55, 0.05, 0.1, 0.075])  # Centered at 0.55
+ax_prev = plt.axes([0.30, 0.05, 0.1, 0.075])  # Adjusted position
+ax_next = plt.axes([0.40, 0.05, 0.1, 0.075])  # Adjusted position
+ax_save = plt.axes([0.50, 0.05, 0.1, 0.075])  # New save button
+ax_quit = plt.axes([0.60, 0.05, 0.1, 0.075])  # Adjusted position
 btn_prev = Button(ax_prev, "Previous")
 btn_next = Button(ax_next, "Next")
+btn_save = Button(ax_save, "Save Comp")
 btn_quit = Button(ax_quit, "Quit")
-
 
 # Connect button events
 btn_prev.on_clicked(prev_plot)
 btn_next.on_clicked(next_plot)
+btn_save.on_clicked(save_comparison)
 btn_quit.on_clicked(quit_plot)
 
 # Show the plot
